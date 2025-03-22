@@ -24,22 +24,41 @@ jobs:
       - name: Build project
         run: npm run build
 
-      - name: Deploy to Hostinger Server
-        uses: appleboy/scp-action@master
-        with:
-          host: ${{ secrets.SERVER_IP }}
-          username: "root"  # Changed from secrets.SERVER_USER
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "build/*"
-          target: "/var/www/html"  # Adjust based on your Hostinger setup
-
-      - name: Restart Server
+      - name: Delete existing files on the server
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.SERVER_IP }}
           username: "root"
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            export PATH=$PATH:/usr/local/bin/pm2
-            cd /var/www/html/react-app
+            rm -rf /var/www/html/*  # Ensure old files are deleted before deploying
+
+      - name: Deploy to Hostinger Server
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: "root"
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          source: "build/*"  # Upload only the contents of 'build', NOT the folder itself
+          target: "/var/www/html"
+
+      - name: Set correct permissions on deployed files
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: "root"
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            chown -R www-data:www-data /var/www/html
+            chmod -R 755 /var/www/html
+
+      - name: Restart Server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            export PATH=$PATH:/usr/local/bin
+            cd /var/www/html
             /usr/local/bin/pm2 restart app || /usr/local/bin/pm2 start npm --name "app" -- start
